@@ -123,10 +123,7 @@ typedef enum {
 #define DEAD_BEEF                       0xDEADBEEF                              /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
 
-NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
-NRF_BLE_QWR_DEF(m_qwr);                                                         /**< Context for the Queued Write module.*/
-BLE_ADVERTISING_DEF(m_advertising);   
-APP_TIMER_DEF(m_battery_timer_id);                                              /**< Advertising module instance. */
+                                          /**< Advertising module instance. */
 
 static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;    
 static nrf_saadc_value_t adc_buf[2];                                            /**< Handle of the current connection. */
@@ -148,17 +145,21 @@ static volatile bool m_is_ias_present = false;                                /*
         ((((ADC_VALUE) * ADC_REF_VOLTAGE_IN_MILLIVOLTS) / ADC_RES_10BIT) * ADC_PRE_SCALING_COMPENSATION)
 
 
-/* YOUR_JOB: Declare all services structure your application is using
+/*  Declare all services structure your application is using
  *  BLE_XYZ_DEF(m_xyz);
  */
+NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
+NRF_BLE_QWR_DEF(m_qwr);                                                         /**< Context for the Queued Write module.*/
+BLE_ADVERTISING_DEF(m_advertising);   
+APP_TIMER_DEF(m_battery_timer_id);            
 BLE_BAS_DEF(m_bas); 
 BLE_LLS_DEF(m_lls);
 BLE_TPS_DEF(m_tps);
 BLE_IAS_C_DEF(m_ias_c);
 BLE_IAS_DEF(m_ias, NRF_SDH_BLE_TOTAL_LINK_COUNT);  
-BLE_DB_DISCOVERY_DEF(m_ble_db_discovery);                              /**< Immediate Alert service instance. */
+BLE_DB_DISCOVERY_DEF(m_ble_db_discovery);                                       /**< Immediate Alert service instance. */
 
-// YOUR_JOB: Use UUIDs for service(s) used in your application.
+// Use UUIDs for service(s) used in your application.
 static ble_uuid_t m_adv_uuids[] =                                               /**< Universally unique service identifiers. */
 {
         {BLE_UUID_TX_POWER_SERVICE, BLE_UUID_TYPE_BLE},
@@ -378,7 +379,7 @@ static void on_lls_evt(ble_lls_t * p_lls, ble_lls_evt_t * p_evt)
 //     .handler = buttonless_dfu_sdh_state_observer,
 // };
 
-// YOUR_JOB: Update this code if you want to do anything given a DFU event (optional).
+//  Update this code if you want to do anything given a DFU event (optional).
 /**@brief Function for handling dfu events from the Buttonless Secure DFU service
  *
  * @param[in]   event   Event from the Buttonless Secure DFU service.
@@ -568,7 +569,7 @@ static void gap_params_init(void)
     err_code = sd_ble_gap_appearance_set(BLE_APPEARANCE_GENERIC_KEYRING);
     APP_ERROR_CHECK(err_code);
 
-    /* YOUR_JOB: Use an appearance value matching the application's use case.
+    /*  Use an appearance value matching the application's use case.
        err_code = sd_ble_gap_appearance_set(BLE_APPEARANCE_);
        APP_ERROR_CHECK(err_code); */
 
@@ -609,31 +610,6 @@ static void nrf_qwr_error_handler(uint32_t nrf_error)
 }
 
 
-/**@brief Function for handling the YYY Service events.
- * YOUR_JOB implement a service handler function depending on the event the service you are using can generate
- *
- * @details This function will be called for all YY Service events which are passed to
- *          the application.
- *
- * @param[in]   p_yy_service   YY Service structure.
- * @param[in]   p_evt          Event received from the YY Service.
- *
- *
-static void on_yys_evt(ble_yy_service_t     * p_yy_service,
-                       ble_yy_service_evt_t * p_evt)
-{
-    switch (p_evt->evt_type)
-    {
-        case BLE_YY_NAME_EVT_WRITE:
-            APPL_LOG("[APPL]: charact written with value %s. ", p_evt->params.char_xx.value.p_str);
-            break;
-
-        default:
-            // No implementation needed.
-            break;
-    }
-}
-*/
 
 
 /**@brief Function for initializing the Link Loss Service.
