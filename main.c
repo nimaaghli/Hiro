@@ -444,7 +444,7 @@ void saadc_event_handler(nrfx_saadc_evt_t const * p_event)
         batt_lvl_in_milli_volts = ADC_RESULT_IN_MILLI_VOLTS(adc_result) +
                                   DIODE_FWD_VOLT_DROP_MILLIVOLTS;
         percentage_batt_lvl = battery_level_in_percent(batt_lvl_in_milli_volts);
-        //NRF_LOG_INFO("SAADC Event=  %i", percentage_batt_lvl);
+        NRF_LOG_INFO("SAADC Event=  %i", percentage_batt_lvl);
 
         err_code = ble_bas_battery_level_update(&m_bas, percentage_batt_lvl, BLE_CONN_HANDLE_ALL);
         if ((err_code != NRF_SUCCESS) &&
@@ -481,7 +481,6 @@ static void adc_configure(void)
     nrfx_saadc_config_t saadc_config = NRFX_SAADC_DEFAULT_CONFIG; 
     ret_code_t err_code = nrfx_saadc_init(&saadc_config, saadc_event_handler);
     APP_ERROR_CHECK(err_code);
-    NRF_LOG_INFO("%i",err_code);
 
     nrf_saadc_channel_config_t config =
     NRFX_SAADC_DEFAULT_CHANNEL_CONFIG_SE(NRF_SAADC_INPUT_VDD);
@@ -979,7 +978,7 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
             break;
 
         case BLE_ADV_EVT_IDLE:
-            sleep_mode_enter();
+            //sleep_mode_enter();
             break;
 
         default:
@@ -1093,18 +1092,18 @@ static void peer_manager_init(void)
 
     // Security parameters to be used for all security procedures.
     //** Pairing//
-    // sec_param.bond = false;
-    // sec_param.mitm = false;
-    // sec_param.lesc = 0;
-    // sec_param.keypress = 0;
-    // sec_param.io_caps = BLE_GAP_IO_CAPS_NONE;
-    // sec_param.oob = false;
-    // sec_param.min_key_size = 7;
-    // sec_param.max_key_size = 16;
-    // sec_param.kdist_own.enc = 0;
-    // sec_param.kdist_own.id = 0;
-    // sec_param.kdist_peer.enc = 0;
-    // sec_param.kdist_peer.id = 0;
+    sec_param.bond = false;
+    sec_param.mitm = false;
+    sec_param.lesc = 0;
+    sec_param.keypress = 0;
+    sec_param.io_caps = BLE_GAP_IO_CAPS_NONE;
+    sec_param.oob = false;
+    sec_param.min_key_size = 7;
+    sec_param.max_key_size = 16;
+    sec_param.kdist_own.enc = 0;
+    sec_param.kdist_own.id = 0;
+    sec_param.kdist_peer.enc = 0;
+    sec_param.kdist_peer.id = 0;
     /**Bonfing**///
     // sec_param.bond = true;
     // sec_param.mitm = false;
@@ -1294,8 +1293,16 @@ static void idle_state_handle(void)
 {
     if (NRF_LOG_PROCESS() == false)
     {
-        nrf_pwr_mgmt_run();
+    //     //nrf_pwr_mgmt_run();
+       uint32_t err_code = sd_app_evt_wait();
+    /*
+       This signals the softdevice handler that we want the CPU to
+       sleep until an event/interrupt occurs. During this time the
+       softdevice will do what it needs to do.
+    */
+    APP_ERROR_CHECK(err_code);
     }
+
 }
 
 
@@ -1321,7 +1328,7 @@ static void advertising_start(bool erase_bonds)
  */
 int main(void)
 {
-
+    NRF_POWER->DCDCEN = 1;
     bool erase_bonds;
     get_uicr();
     // Initialize.
