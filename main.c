@@ -4,7 +4,6 @@
  *
  * @defgroup Hiro main.c
  * @{
- * @ingroup ble_sdk_app_template
  * @brief Main project file for Hiro
  *
  * This file contains main source code for Hiro with NRF52832 nordic chips.
