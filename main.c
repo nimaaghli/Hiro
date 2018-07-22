@@ -64,8 +64,7 @@
 //#include "nrf_drv_clock.h"
 //#include "nrf_power.h"
 /*Ticks before change duty cycle of each LED*/
-#define TICKS_BEFORE_CHANGE_0   0
-#define TICKS_BEFORE_CHANGE_1   400
+
 static low_power_pwm_t low_power_pwm_0;
 static int tune[] = {55,65,68,120,68,65,60};
 static int waits[] = {70,67,68,135,68,67,70};
@@ -156,7 +155,8 @@ static volatile bool m_is_ias_present = false;                                /*
 NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                                         /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);   
-APP_TIMER_DEF(m_battery_timer_id);            
+APP_TIMER_DEF(m_battery_timer_id);  
+APP_TIMER_DEF(m_alaram_timer_id);          
 BLE_BAS_DEF(m_bas); 
 BLE_LLS_DEF(m_lls);
 BLE_TPS_DEF(m_tps);
@@ -319,6 +319,8 @@ static void alert_signal(uint8_t alert_level)
             NRF_LOG_INFO("No Alert.");
             err_code = bsp_indication_set(BSP_INDICATE_ALERT_OFF);
             APP_ERROR_CHECK(err_code);
+            err_code = low_power_pwm_stop(&low_power_pwm_0);
+            APP_ERROR_CHECK(err_code);
             break; // BLE_CHAR_ALERT_LEVEL_NO_ALERT
 
         case BLE_CHAR_ALERT_LEVEL_MILD_ALERT:
@@ -330,6 +332,8 @@ static void alert_signal(uint8_t alert_level)
         case BLE_CHAR_ALERT_LEVEL_HIGH_ALERT:
             NRF_LOG_INFO("HIGH Alert.");
             err_code = bsp_indication_set(BSP_INDICATE_ALERT_3);
+            APP_ERROR_CHECK(err_code);
+            err_code = low_power_pwm_start((&low_power_pwm_0), low_power_pwm_0.bit_mask);
             APP_ERROR_CHECK(err_code);
             break; // BLE_CHAR_ALERT_LEVEL_HIGH_ALERT
 
@@ -548,6 +552,10 @@ static void timers_init(void)
     err_code = app_timer_create(&m_battery_timer_id,
                                 APP_TIMER_MODE_REPEATED,
                                 battery_level_meas_timeout_handler);
+    // APP_ERROR_CHECK(err_code);
+    // err_code = app_timer_create(&m_alaram_timer_id,
+    //                             APP_TIMER_MODE_SINGLE_SHOT,
+    //                             alarm_timeout_handler);
     APP_ERROR_CHECK(err_code);
 
 }
@@ -1166,6 +1174,7 @@ static void bsp_event_handler(bsp_event_t event)
                     err_code =
                         ble_ias_c_send_alert_level(&m_ias_c, BLE_CHAR_ALERT_LEVEL_HIGH_ALERT);
                         NRF_LOG_INFO("BLE_CHAR_ALERT_LEVEL_HIGH_ALERT");
+
                 }
                 else
                 {
@@ -1312,7 +1321,7 @@ static void advertising_start(bool erase_bonds)
 static void pwm_handler(void * p_context)
 {
     //uint8_t new_duty_cycle;
-    static uint16_t led_0, led_1;
+    static uint16_t led_0;
     //uint32_t err_code;
     UNUSED_PARAMETER(p_context);
 
@@ -1335,18 +1344,6 @@ static void pwm_handler(void * p_context)
                 counter = 0 ;
             }
       
-            //APP_ERROR_CHECK(err_code);
-        }
-    }
-    else if (pwm_instance->bit_mask == BSP_LED_1_MASK)
-    {
-        led_1++;
-
-        if (led_1 > TICKS_BEFORE_CHANGE_1)
-        {
-            //new_duty_cycle = pwm_instance->period - pwm_instance->duty_cycle;
-            //err_code = low_power_pwm_duty_set(pwm_instance, new_duty_cycle);
-            led_1 = 0;
             //APP_ERROR_CHECK(err_code);
         }
     }
@@ -1378,8 +1375,7 @@ static void pwm_init(void)
     APP_ERROR_CHECK(err_code);
     err_code = low_power_pwm_duty_set(&low_power_pwm_0, 20);
     APP_ERROR_CHECK(err_code);
-    err_code = low_power_pwm_start((&low_power_pwm_0), low_power_pwm_0.bit_mask);
-     APP_ERROR_CHECK(err_code);
+
 }
 
 
@@ -1408,7 +1404,7 @@ int main(void)
     peer_manager_init();
 
     // Start execution.
-    NRF_LOG_INFO("Template example started.");
+    NRF_LOG_INFO("Hiro started.");
     application_timers_start();
 
     advertising_start(erase_bonds);
