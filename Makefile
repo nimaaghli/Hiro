@@ -90,6 +90,7 @@ SRC_FILES += \
   $(SDK_ROOT)/modules/nrfx/hal/nrf_nvmc.c \
   $(SDK_ROOT)/components/ble/ble_link_ctx_manager/ble_link_ctx_manager.c \
   $(SDK_ROOT)/components/ble/ble_db_discovery/ble_db_discovery.c \
+  $(SDK_ROOT)/components/libraries/low_power_pwm/low_power_pwm.c \
   #$(SDK_ROOT)/components/libraries/bootloader/dfu/nrf_dfu_svci.c \
  #$(SDK_ROOT)/components/ble/ble_services/ble_dfu/ble_dfu.c \
   #$(SDK_ROOT)/components/ble/ble_services/ble_dfu/ble_dfu_bonded.c \
@@ -232,6 +233,8 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/libraries/bootloader/dfu \
   $(SDK_ROOT)/components/libraries/bootloader/ble_dfu \
   $(SDK_ROOT)/components/ble/ble_services/ble_dfu \
+  $(SDK_ROOT)/components/libraries/low_power_pwm \
+
   #$(SDK_ROOT)/components/libraries/svc \
   #$(SDK_ROOT)/components/libraries/bootloader \
 

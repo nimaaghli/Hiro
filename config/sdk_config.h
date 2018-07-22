@@ -57,6 +57,8 @@
 #endif
 
 
+   
+
 #ifndef BLE_DB_DISCOVERY_ENABLED
 #define BLE_DB_DISCOVERY_ENABLED 1
 #endif
@@ -4635,6 +4637,9 @@
 #define PPI_ENABLED 0
 #endif
 
+
+
+
 // <e> PWM_ENABLED - nrf_drv_pwm - PWM peripheral driver - legacy layer
 //==========================================================
 #ifndef PWM_ENABLED
@@ -6457,7 +6462,7 @@
  
 
 #ifndef LOW_POWER_PWM_ENABLED
-#define LOW_POWER_PWM_ENABLED 0
+#define LOW_POWER_PWM_ENABLED 1
 #endif
 
 // <e> MEM_MANAGER_ENABLED - mem_manager - Dynamic memory allocator

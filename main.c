@@ -57,13 +57,19 @@
 #include "uicr.h"
 #include "ble_db_discovery.h"
 #include "ble_dfu.h"
+#include "low_power_pwm.h"  
 //#include "nrf_svci_async_function.h"
 //#include "nrf_svci_async_handler.h"
 //#include "nrf_bootloader_info.h"
 //#include "nrf_drv_clock.h"
 //#include "nrf_power.h"
-
-
+/*Ticks before change duty cycle of each LED*/
+#define TICKS_BEFORE_CHANGE_0   0
+#define TICKS_BEFORE_CHANGE_1   400
+static low_power_pwm_t low_power_pwm_0;
+static int tune[] = {55,65,68,120,68,65,60};
+static int waits[] = {70,67,68,135,68,67,70};
+static int counter = 0;
 
 /* Valid Advertising States */
 typedef enum {
@@ -1298,6 +1304,85 @@ static void advertising_start(bool erase_bonds)
     }
 }
 
+/**
+ * @brief Function to be called in timer interrupt.
+ *
+ * @param[in] p_context     General purpose pointer (unused).
+ */
+static void pwm_handler(void * p_context)
+{
+    //uint8_t new_duty_cycle;
+    static uint16_t led_0, led_1;
+    //uint32_t err_code;
+    UNUSED_PARAMETER(p_context);
+
+    low_power_pwm_t * pwm_instance = (low_power_pwm_t*)p_context;
+
+    if (pwm_instance->bit_mask == (1 <<  NRF_GPIO_PIN_MAP(0,18)))
+    {
+        led_0++;
+
+        if (led_0 > waits[counter])
+        {
+             pwm_instance->period = tune[counter];
+            //new_duty_cycle = pwm_instance->period - pwm_instance->duty_cycle;
+            //err_code = low_power_pwm_duty_set(pwm_instance, tune[counter]-10);
+            //APP_ERROR_CHECK(err_code);
+            led_0 = 0;
+            counter++;
+            if (counter > 6)
+            {
+                counter = 0 ;
+            }
+      
+            //APP_ERROR_CHECK(err_code);
+        }
+    }
+    else if (pwm_instance->bit_mask == BSP_LED_1_MASK)
+    {
+        led_1++;
+
+        if (led_1 > TICKS_BEFORE_CHANGE_1)
+        {
+            //new_duty_cycle = pwm_instance->period - pwm_instance->duty_cycle;
+            //err_code = low_power_pwm_duty_set(pwm_instance, new_duty_cycle);
+            led_1 = 0;
+            //APP_ERROR_CHECK(err_code);
+        }
+    }
+    else
+    {
+        /*empty else*/
+    }
+}
+
+
+/**
+ * @brief Function to initalize low_power_pwm instances.
+ *
+ */
+
+static void pwm_init(void)
+{
+    uint32_t err_code;
+    low_power_pwm_config_t low_power_pwm_config;
+
+    APP_TIMER_DEF(lpp_timer_0);
+    low_power_pwm_config.active_high    = false;
+    low_power_pwm_config.period         = 50;
+    low_power_pwm_config.bit_mask       = (1 <<  NRF_GPIO_PIN_MAP(0,18));
+    low_power_pwm_config.p_timer_id     = &lpp_timer_0;
+    low_power_pwm_config.p_port         = NRF_GPIO;
+
+    err_code = low_power_pwm_init((&low_power_pwm_0), &low_power_pwm_config, pwm_handler);
+    APP_ERROR_CHECK(err_code);
+    err_code = low_power_pwm_duty_set(&low_power_pwm_0, 20);
+    APP_ERROR_CHECK(err_code);
+    err_code = low_power_pwm_start((&low_power_pwm_0), low_power_pwm_0.bit_mask);
+     APP_ERROR_CHECK(err_code);
+}
+
+
 
 /**@brief Function for application main entry.
  */
@@ -1309,6 +1394,7 @@ int main(void)
     // Initialize.
     log_init();
     timers_init();
+    pwm_init();
     buttons_leds_init(&erase_bonds);
     power_management_init();
     ble_stack_init();
