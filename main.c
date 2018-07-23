@@ -58,6 +58,8 @@
 #include "ble_db_discovery.h"
 #include "ble_dfu.h"
 #include "low_power_pwm.h"  
+#include "app_button.h"
+#include "nrf_delay.h"
 //#include "nrf_svci_async_function.h"
 //#include "nrf_svci_async_handler.h"
 //#include "nrf_bootloader_info.h"
@@ -66,8 +68,8 @@
 /*Ticks before change duty cycle of each LED*/
 
 static low_power_pwm_t low_power_pwm_0;
-static int tune[] = {55,65,68,120,68,65,60};
-static int waits[] = {70,67,68,135,68,67,70};
+static int tune[] = {55,56,57,59,59,60,67};
+static int waits[] = {135,157,500,187,168,130,167};
 static int counter = 0;
 
 /* Valid Advertising States */
@@ -89,6 +91,7 @@ typedef enum {
 #define APP_ADV_INTERVAL                0x0020                                     /**< The advertising interval (in units of 0.625 ms. This value corresponds to 187.5 ms). */
 
 #define BATTERY_LEVEL_MEAS_INTERVAL     APP_TIMER_TICKS(20000)                  /**< Battery level measurement interval (ticks). This value corresponds to 20 seconds. */
+#define BUTTON_LONG_PRESS_DELAY         APP_TIMER_TICKS(2000)
 
 #define ADC_REF_VOLTAGE_IN_MILLIVOLTS   600                                     /**< Reference voltage (in milli volts) used by ADC while doing conversion. */
 #define ADC_PRE_SCALING_COMPENSATION    6                                       /**< The ADC is configured to use VDD with 1/3 prescaling as input. And hence the result of conversion is to be multiplied by 3 to get the actual value of the battery voltage.*/
@@ -100,7 +103,16 @@ typedef enum {
 #define TX_POWER_LEVEL                  (0)                                      /**< TX Power Level value. This will be set both in the TX Power 
                                                                                 service, in the advertising data, and also used to set the radio  
                                                                                 transmit power. */
-                       
+    
+#define BUTTON_DETECTION_DELAY          APP_TIMER_TICKS(50)                      /**< Delay from a GPIOTE event \
+                                                                                 until a button is reported as  \
+                                                                                 pushed (in number of timer     \
+                                                                                 ticks). */
+
+#define BUZZER_POWER_OFF_DURECTION      APP_TIMER_TICKS(900)
+#define BUZZER_BUTTON_PUSHH_DURECTION   APP_TIMER_TICKS(400)
+#define PUSH_BUTTON_PIN                 16                                      /**< Pin number for push button on Hiro */
+
         
 #define APP_ADV_DURATION                18000                                   /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
 #define APP_BLE_OBSERVER_PRIO           3                                       /**< Application's BLE observer priority. You shouldn't need to modify this value. */
@@ -134,11 +146,14 @@ static nrf_saadc_value_t adc_buf[2];                                            
 static volatile bool m_is_high_alert_signalled;                                 /**< Variable to indicate whether or not high
                                                                                 alert is signalled to the peer. */
 
+static bool button_timer_running_p = false;
 static uint8_t m_advertising_mode;                                             /**< Variable to keep track of when we are
                                                                                advertising. */
 static volatile bool m_is_high_alert_signalled;                                /**< Variable to indicate whether a high alert has been signalled to the peer. */
 static volatile bool m_is_ias_present = false;                                /**< Variable to indicate whether the immediate alert service has been discovered at the connected peer. */
-                   
+static volatile bool m_is_poweroff_buzzed = false;   
+static volatile bool m_is_button_push_buzzed = false; 
+             
 /**@brief Macro to convert the result of ADC conversion in millivolts.
  *
  * @param[in]  ADC_VALUE   ADC result.
@@ -155,8 +170,9 @@ static volatile bool m_is_ias_present = false;                                /*
 NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                                         /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);   
-APP_TIMER_DEF(m_battery_timer_id);  
-APP_TIMER_DEF(m_alaram_timer_id);          
+APP_TIMER_DEF(m_battery_timer_id); 
+APP_TIMER_DEF(m_buzzer_timer_id);
+APP_TIMER_DEF(m_button_timer_id);        
 BLE_BAS_DEF(m_bas); 
 BLE_LLS_DEF(m_lls);
 BLE_TPS_DEF(m_tps);
@@ -206,6 +222,28 @@ static void service_error_handler(uint32_t nrf_error)
     APP_ERROR_HANDLER(nrf_error);
 }
 
+
+static void play_tune(uint8_t signal_id){
+    ret_code_t err_code;
+    if(signal_id == 0 ) // power off tune 
+    {    m_is_poweroff_buzzed = true;
+        err_code = low_power_pwm_start((&low_power_pwm_0), low_power_pwm_0.bit_mask);
+        APP_ERROR_CHECK(err_code);
+        err_code = app_timer_start(m_buzzer_timer_id, BUZZER_POWER_OFF_DURECTION, NULL);
+        APP_ERROR_CHECK(err_code);
+        
+    }
+    else if(signal_id == 1 ) // power off tune 
+    {   m_is_button_push_buzzed = true;
+        err_code = low_power_pwm_start((&low_power_pwm_0), low_power_pwm_0.bit_mask);
+        APP_ERROR_CHECK(err_code);
+        err_code = app_timer_start(m_buzzer_timer_id, BUZZER_BUTTON_PUSHH_DURECTION, NULL);
+        APP_ERROR_CHECK(err_code);
+        
+    }
+
+
+}
 
 /**@brief Function for handling Peer Manager events.
  *
@@ -320,6 +358,7 @@ static void alert_signal(uint8_t alert_level)
             err_code = bsp_indication_set(BSP_INDICATE_ALERT_OFF);
             APP_ERROR_CHECK(err_code);
             err_code = low_power_pwm_stop(&low_power_pwm_0);
+
             APP_ERROR_CHECK(err_code);
             break; // BLE_CHAR_ALERT_LEVEL_NO_ALERT
 
@@ -538,6 +577,21 @@ static void battery_level_meas_timeout_handler(void * p_context)
 }
 
 
+static void button_timeout_handler(void *p_context) {
+    NRF_LOG_INFO("Restarting");
+    play_tune(0);
+    //nrf_delay_ms(500);
+    //NVIC_SystemReset();
+    // Does not return
+}
+
+static void buzzer_timeout_handler(void *p_context) {
+    ret_code_t err_code;
+    err_code = low_power_pwm_stop(&low_power_pwm_0);
+    APP_ERROR_CHECK(err_code);
+    if(m_is_poweroff_buzzed){ NVIC_SystemReset(); }
+    m_is_button_push_buzzed = false;
+}
 
 /**@brief Function for the Timer initialization.
  *
@@ -552,10 +606,14 @@ static void timers_init(void)
     err_code = app_timer_create(&m_battery_timer_id,
                                 APP_TIMER_MODE_REPEATED,
                                 battery_level_meas_timeout_handler);
-    // APP_ERROR_CHECK(err_code);
-    // err_code = app_timer_create(&m_alaram_timer_id,
-    //                             APP_TIMER_MODE_SINGLE_SHOT,
-    //                             alarm_timeout_handler);
+
+    APP_ERROR_CHECK(err_code);
+    err_code = app_timer_create(&m_button_timer_id, APP_TIMER_MODE_SINGLE_SHOT,
+                                button_timeout_handler);
+    APP_ERROR_CHECK(err_code);
+    err_code = app_timer_create(&m_buzzer_timer_id,
+                                APP_TIMER_MODE_SINGLE_SHOT,
+                                buzzer_timeout_handler);
     APP_ERROR_CHECK(err_code);
 
 }
@@ -1234,6 +1292,55 @@ static void advertising_init(void)
     ble_advertising_conn_cfg_tag_set(&m_advertising, APP_BLE_CONN_CFG_TAG);
 }
 
+static void button_event_handler(uint8_t pin_no, uint8_t button_action) {
+    ret_code_t err_code;
+    if (button_action == APP_BUTTON_PUSH) {
+        app_timer_start(m_button_timer_id, BUTTON_LONG_PRESS_DELAY, NULL);
+        button_timer_running_p = true;
+
+    }
+    else{
+        if(button_timer_running_p){
+            app_timer_stop(m_button_timer_id);
+            NRF_LOG_INFO("THIS IS A SHORT Press");
+            play_tune(1);
+            if (m_is_ias_present)
+            {
+                NRF_LOG_INFO("m_is_ias_present");
+                if (!m_is_high_alert_signalled)
+                {
+                    err_code =
+                        ble_ias_c_send_alert_level(&m_ias_c, BLE_CHAR_ALERT_LEVEL_HIGH_ALERT);
+                        NRF_LOG_INFO("BLE_CHAR_ALERT_LEVEL_HIGH_ALERT");
+
+                }
+                else
+                {
+                    err_code = ble_ias_c_send_alert_level(&m_ias_c, BLE_CHAR_ALERT_LEVEL_NO_ALERT);
+                    NRF_LOG_INFO("BLE_CHAR_ALERT_LEVEL_LOW_ALERT");
+                }
+
+                if (err_code == NRF_SUCCESS)
+                {
+                    m_is_high_alert_signalled = !m_is_high_alert_signalled;
+                }
+                else if (
+                    (err_code != NRF_ERROR_RESOURCES)
+                    &&
+                    (err_code != BLE_ERROR_GATTS_SYS_ATTR_MISSING)
+                    &&
+                    (err_code != NRF_ERROR_NOT_FOUND)
+                        )
+                {
+                    APP_ERROR_HANDLER(err_code);
+                }
+            }
+            //m_is_button_push_buzzed = false;
+        }
+    }
+ 
+}
+
 
 /**@brief Function for initializing buttons and leds.
  *
@@ -1242,15 +1349,21 @@ static void advertising_init(void)
 static void buttons_leds_init(bool * p_erase_bonds)
 {
     ret_code_t err_code;
-    bsp_event_t startup_event;
+    //bsp_event_t startup_event;
+    static app_button_cfg_t buttons[] = {
+    {PUSH_BUTTON_PIN, APP_BUTTON_ACTIVE_LOW, NRF_GPIO_PIN_PULLUP,
+    button_event_handler}};
+    app_button_init(buttons, sizeof(buttons) / sizeof(buttons[0]),
+                    BUTTON_DETECTION_DELAY);
+     err_code = app_button_enable();
+     APP_ERROR_CHECK(err_code);
+    //err_code = bsp_init(BSP_INIT_LEDS | BSP_INIT_BUTTONS, bsp_event_handler);
+    //APP_ERROR_CHECK(err_code);
 
-    err_code = bsp_init(BSP_INIT_LEDS | BSP_INIT_BUTTONS, bsp_event_handler);
-    APP_ERROR_CHECK(err_code);
+    //err_code = bsp_btn_ble_init(NULL, &startup_event);
+    // APP_ERROR_CHECK(err_code);
 
-    err_code = bsp_btn_ble_init(NULL, &startup_event);
-    APP_ERROR_CHECK(err_code);
-
-    *p_erase_bonds = (startup_event == BSP_EVENT_CLEAR_BONDING_DATA);
+    //*p_erase_bonds = (startup_event == BSP_EVENT_CLEAR_BONDING_DATA);
 }
 
 
@@ -1320,6 +1433,18 @@ static void advertising_start(bool erase_bonds)
  */
 static void pwm_handler(void * p_context)
 {
+    if(m_is_poweroff_buzzed){
+        tune[0] = 89;
+        waits[0] = BUZZER_POWER_OFF_DURECTION;
+    }
+    else if(m_is_button_push_buzzed){
+        tune[0] = 89;
+        waits[0] = BUZZER_POWER_OFF_DURECTION;
+    }
+    else{
+        tune[0] = 55;
+        waits[0] = 135;
+    }
     //uint8_t new_duty_cycle;
     static uint16_t led_0;
     //uint32_t err_code;
@@ -1331,7 +1456,7 @@ static void pwm_handler(void * p_context)
     {
         led_0++;
 
-        if (led_0 > waits[counter])
+        if (led_0 > waits[counter]/2)
         {
              pwm_instance->period = tune[counter];
             //new_duty_cycle = pwm_instance->period - pwm_instance->duty_cycle;
@@ -1366,14 +1491,14 @@ static void pwm_init(void)
 
     APP_TIMER_DEF(lpp_timer_0);
     low_power_pwm_config.active_high    = false;
-    low_power_pwm_config.period         = 50;
+    low_power_pwm_config.period         = 90;
     low_power_pwm_config.bit_mask       = (1 <<  NRF_GPIO_PIN_MAP(0,18));
     low_power_pwm_config.p_timer_id     = &lpp_timer_0;
     low_power_pwm_config.p_port         = NRF_GPIO;
 
     err_code = low_power_pwm_init((&low_power_pwm_0), &low_power_pwm_config, pwm_handler);
     APP_ERROR_CHECK(err_code);
-    err_code = low_power_pwm_duty_set(&low_power_pwm_0, 20);
+    err_code = low_power_pwm_duty_set(&low_power_pwm_0, 50);
     APP_ERROR_CHECK(err_code);
 
 }

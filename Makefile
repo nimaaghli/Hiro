@@ -234,6 +234,7 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/libraries/bootloader/ble_dfu \
   $(SDK_ROOT)/components/ble/ble_services/ble_dfu \
   $(SDK_ROOT)/components/libraries/low_power_pwm \
+  $(SDK_ROOT)/components/libraries/button/ \
 
   #$(SDK_ROOT)/components/libraries/svc \
   #$(SDK_ROOT)/components/libraries/bootloader \
