@@ -67,9 +67,9 @@
 //#include "nrf_power.h"
 /*Ticks before change duty cycle of each LED*/
 
-static low_power_pwm_t low_power_pwm_0;
-static int tune[] = {55,56,57,59,59,60,67};
-static int waits[] = {135,157,500,187,168,130,167};
+
+static int tune[] = {30,55,30,55,35,54,55};
+static int waits[] = {235,157,100,187,168,130,167};
 static int counter = 0;
 
 /* Valid Advertising States */
@@ -145,6 +145,8 @@ static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;
 static nrf_saadc_value_t adc_buf[2];                                            /**< Handle of the current connection. */
 static volatile bool m_is_high_alert_signalled;                                 /**< Variable to indicate whether or not high
                                                                                 alert is signalled to the peer. */
+static low_power_pwm_t low_power_pwm_0;
+static low_power_pwm_t low_power_pwm_1;
 
 static bool button_timer_running_p = false;
 static uint8_t m_advertising_mode;                                             /**< Variable to keep track of when we are
@@ -229,6 +231,8 @@ static void play_tune(uint8_t signal_id){
     {    m_is_poweroff_buzzed = true;
         err_code = low_power_pwm_start((&low_power_pwm_0), low_power_pwm_0.bit_mask);
         APP_ERROR_CHECK(err_code);
+        err_code = low_power_pwm_start((&low_power_pwm_1), low_power_pwm_1.bit_mask);
+        APP_ERROR_CHECK(err_code);
         err_code = app_timer_start(m_buzzer_timer_id, BUZZER_POWER_OFF_DURECTION, NULL);
         APP_ERROR_CHECK(err_code);
         
@@ -236,6 +240,8 @@ static void play_tune(uint8_t signal_id){
     else if(signal_id == 1 ) // power off tune 
     {   m_is_button_push_buzzed = true;
         err_code = low_power_pwm_start((&low_power_pwm_0), low_power_pwm_0.bit_mask);
+        APP_ERROR_CHECK(err_code);
+        err_code = low_power_pwm_start((&low_power_pwm_1), low_power_pwm_1.bit_mask);
         APP_ERROR_CHECK(err_code);
         err_code = app_timer_start(m_buzzer_timer_id, BUZZER_BUTTON_PUSHH_DURECTION, NULL);
         APP_ERROR_CHECK(err_code);
@@ -358,7 +364,8 @@ static void alert_signal(uint8_t alert_level)
             err_code = bsp_indication_set(BSP_INDICATE_ALERT_OFF);
             APP_ERROR_CHECK(err_code);
             err_code = low_power_pwm_stop(&low_power_pwm_0);
-
+            APP_ERROR_CHECK(err_code);
+            err_code = low_power_pwm_stop(&low_power_pwm_1);
             APP_ERROR_CHECK(err_code);
             break; // BLE_CHAR_ALERT_LEVEL_NO_ALERT
 
@@ -373,6 +380,8 @@ static void alert_signal(uint8_t alert_level)
             err_code = bsp_indication_set(BSP_INDICATE_ALERT_3);
             APP_ERROR_CHECK(err_code);
             err_code = low_power_pwm_start((&low_power_pwm_0), low_power_pwm_0.bit_mask);
+            APP_ERROR_CHECK(err_code);
+            err_code = low_power_pwm_start((&low_power_pwm_1), low_power_pwm_1.bit_mask);
             APP_ERROR_CHECK(err_code);
             break; // BLE_CHAR_ALERT_LEVEL_HIGH_ALERT
 
@@ -588,6 +597,8 @@ static void button_timeout_handler(void *p_context) {
 static void buzzer_timeout_handler(void *p_context) {
     ret_code_t err_code;
     err_code = low_power_pwm_stop(&low_power_pwm_0);
+    APP_ERROR_CHECK(err_code);
+    err_code = low_power_pwm_stop(&low_power_pwm_1);
     APP_ERROR_CHECK(err_code);
     if(m_is_poweroff_buzzed){ NVIC_SystemReset(); }
     m_is_button_push_buzzed = false;
@@ -1434,34 +1445,34 @@ static void advertising_start(bool erase_bonds)
 static void pwm_handler(void * p_context)
 {
     if(m_is_poweroff_buzzed){
-        tune[0] = 89;
+        tune[0] = 30;
         waits[0] = BUZZER_POWER_OFF_DURECTION;
     }
     else if(m_is_button_push_buzzed){
-        tune[0] = 89;
-        waits[0] = BUZZER_POWER_OFF_DURECTION;
+        tune[0] = 20;
+        waits[0] = BUZZER_BUTTON_PUSHH_DURECTION;
     }
     else{
-        tune[0] = 55;
+        tune[0] = 30;
         waits[0] = 135;
     }
-    //uint8_t new_duty_cycle;
-    static uint16_t led_0;
-    //uint32_t err_code;
+    uint8_t new_duty_cycle;
+    static uint16_t led_0,led_1;
+    uint32_t err_code;
     UNUSED_PARAMETER(p_context);
 
     low_power_pwm_t * pwm_instance = (low_power_pwm_t*)p_context;
 
-    if (pwm_instance->bit_mask == (1 <<  NRF_GPIO_PIN_MAP(0,18)))
+    if (pwm_instance->bit_mask == (1 <<  NRF_GPIO_PIN_MAP(0,14)))
     {
         led_0++;
 
-        if (led_0 > waits[counter]/2)
+        if (led_0 > waits[counter])
         {
              pwm_instance->period = tune[counter];
-            //new_duty_cycle = pwm_instance->period - pwm_instance->duty_cycle;
-            //err_code = low_power_pwm_duty_set(pwm_instance, tune[counter]-10);
-            //APP_ERROR_CHECK(err_code);
+             new_duty_cycle = pwm_instance->period / 2;
+             err_code = low_power_pwm_duty_set(pwm_instance, new_duty_cycle);
+             APP_ERROR_CHECK(err_code);
             led_0 = 0;
             counter++;
             if (counter > 6)
@@ -1470,6 +1481,22 @@ static void pwm_handler(void * p_context)
             }
       
             //APP_ERROR_CHECK(err_code);
+        }
+    }
+     else if (pwm_instance->bit_mask == (1 <<  NRF_GPIO_PIN_MAP(0,15)))
+    {
+        led_1++;
+
+        if (led_1 > waits[counter])
+        {   
+             pwm_instance->period = tune[counter];
+             new_duty_cycle = pwm_instance->period / 2;
+             err_code = low_power_pwm_duty_set(pwm_instance, new_duty_cycle);
+             APP_ERROR_CHECK(err_code);
+            led_1 = 0;
+            //APP_ERROR_CHECK(err_code);
+         
+    
         }
     }
     else
@@ -1490,16 +1517,29 @@ static void pwm_init(void)
     low_power_pwm_config_t low_power_pwm_config;
 
     APP_TIMER_DEF(lpp_timer_0);
-    low_power_pwm_config.active_high    = false;
-    low_power_pwm_config.period         = 90;
-    low_power_pwm_config.bit_mask       = (1 <<  NRF_GPIO_PIN_MAP(0,18));
+    low_power_pwm_config.active_high    = true;
+    low_power_pwm_config.period         = 30;
+    low_power_pwm_config.bit_mask       = (1 <<  NRF_GPIO_PIN_MAP(0,14));
     low_power_pwm_config.p_timer_id     = &lpp_timer_0;
     low_power_pwm_config.p_port         = NRF_GPIO;
 
     err_code = low_power_pwm_init((&low_power_pwm_0), &low_power_pwm_config, pwm_handler);
     APP_ERROR_CHECK(err_code);
-    err_code = low_power_pwm_duty_set(&low_power_pwm_0, 50);
+    err_code = low_power_pwm_duty_set(&low_power_pwm_0, 15);
     APP_ERROR_CHECK(err_code);
+
+    APP_TIMER_DEF(lpp_timer_1);
+    low_power_pwm_config.active_high    = true;
+    low_power_pwm_config.period         = 30;
+    low_power_pwm_config.bit_mask       = (1 <<  NRF_GPIO_PIN_MAP(0,15));
+    low_power_pwm_config.p_timer_id     = &lpp_timer_1;
+    low_power_pwm_config.p_port         = NRF_GPIO;
+
+    err_code = low_power_pwm_init((&low_power_pwm_1), &low_power_pwm_config, pwm_handler);
+    APP_ERROR_CHECK(err_code);
+    err_code = low_power_pwm_duty_set(&low_power_pwm_1, 15);
+    APP_ERROR_CHECK(err_code);
+
 
 }
 
